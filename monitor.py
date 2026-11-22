@@ -743,6 +743,16 @@ def build_email_content(
     return subject, "\n".join(plain_lines), html_body
 
 
+def _mask_for_github_actions(values: list[str]) -> None:
+    """Registra máscaras individuais no GitHub Actions para evitar vazamento em logs."""
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return
+    for val in values:
+        cleaned = val.strip()
+        if cleaned:
+            print(f"::add-mask::{cleaned}", flush=True)
+
+
 def send_gmail(subject: str, plain_body: str, html_body: str) -> None:
     """Envia e-mail usando Gmail SMTP com Senha de App (sem expor dados nos logs)."""
     gmail_user = os.environ.get("GMAIL_USER", "").strip()
@@ -755,24 +765,34 @@ def send_gmail(subject: str, plain_body: str, html_body: str) -> None:
             "Configure-as nos Secrets do GitHub (ou no ambiente local)."
         )
 
+    recipients = [addr.strip() for addr in email_to.split(",") if addr.strip()]
+    _mask_for_github_actions([gmail_user, gmail_password, *recipients])
+
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
     msg["From"] = f"Monitor PS5 <{gmail_user}>"
-    msg["To"] = email_to
+    msg["To"] = ", ".join(recipients)
     msg.attach(MIMEText(plain_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    recipients = [addr.strip() for addr in email_to.split(",") if addr.strip()]
-
     try:
-        with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as server:
-            server.login(gmail_user, gmail_password)
-            server.sendmail(gmail_user, recipients, msg.as_string())
-    except OSError:
-        with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
-            server.starttls()
-            server.login(gmail_user, gmail_password)
-            server.sendmail(gmail_user, recipients, msg.as_string())
+        try:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=20) as server:
+                server.login(gmail_user, gmail_password)
+                server.sendmail(gmail_user, recipients, msg.as_string())
+        except smtplib.SMTPException:
+            raise
+        except OSError:
+            with smtplib.SMTP("smtp.gmail.com", 587, timeout=20) as server:
+                server.starttls()
+                server.login(gmail_user, gmail_password)
+                server.sendmail(gmail_user, recipients, msg.as_string())
+    except smtplib.SMTPException as exc:
+        # Não encadeia a exceção original para nunca expor endereços ou respostas SMTP nos logs
+        raise RuntimeError(
+            f"Falha SMTP ao enviar e-mail ({type(exc).__name__}). "
+            "Verifique os Secrets GMAIL_USER, GMAIL_APP_PASSWORD e EMAIL_TO."
+        ) from None
 
     # Nunca imprime endereços de e-mail para proteger a privacidade em logs públicos
     print("[OK] E-mail de alerta enviado com sucesso.")

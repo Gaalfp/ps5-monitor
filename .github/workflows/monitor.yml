@@ -17,6 +17,10 @@ on:
         type: boolean
         default: false
 
+# Permissão mínima (somente leitura) para o token automático do workflow
+permissions:
+  contents: read
+
 # Evita duas execuções simultâneas caso o agendador do GitHub atrase
 concurrency:
   group: ps5-price-monitor

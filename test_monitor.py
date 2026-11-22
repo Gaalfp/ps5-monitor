@@ -1,5 +1,8 @@
+import os
+import smtplib
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest import mock
 
 import monitor
 
@@ -144,6 +147,23 @@ class TestPS5Monitor(unittest.TestCase):
         self.assertEqual(len(k_offers), 1)
         self.assertEqual(k_offers[0].price, 3150.5)
         self.assertEqual(k_offers[0].edition, "digital")
+
+    def test_send_gmail_sanitizes_smtp_errors(self):
+        fake_env = {
+            "GMAIL_USER": "secreto1@example.com",
+            "GMAIL_APP_PASSWORD": "abcdefghijklmnop",
+            "EMAIL_TO": "secreto1@example.com, secreto2@example.com",
+        }
+        err = smtplib.SMTPRecipientsRefused({"secreto2@example.com": (550, b"User unknown")})
+        with mock.patch.dict(os.environ, fake_env, clear=False):
+            with mock.patch("smtplib.SMTP_SSL") as mock_ssl:
+                mock_ssl.return_value.__enter__.return_value.sendmail.side_effect = err
+                with self.assertRaises(RuntimeError) as ctx:
+                    monitor.send_gmail("Assunto", "Texto", "<p>HTML</p>")
+                msg = str(ctx.exception)
+                self.assertNotIn("secreto1@example.com", msg)
+                self.assertNotIn("secreto2@example.com", msg)
+                self.assertNotIn("abcdefghijklmnop", msg)
 
 
 if __name__ == "__main__":
