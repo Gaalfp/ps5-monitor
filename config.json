@@ -1,0 +1,31 @@
+{
+  "alert_price": 3500.0,
+  "super_alert_price": 3000.0,
+  "min_price": 1800.0,
+  "allowed_editions": ["disc", "digital"],
+  "min_price_drop_to_renotify": 50.0,
+  "renotify_after_hours": 24,
+  "sources": {
+    "zoom": {
+      "enabled": true,
+      "queries": [
+        "playstation 5 slim",
+        "console playstation 5"
+      ]
+    },
+    "buscape": {
+      "enabled": true,
+      "queries": [
+        "playstation 5 slim"
+      ]
+    },
+    "kabum": {
+      "enabled": true,
+      "queries": [
+        "playstation-5-slim",
+        "console-playstation-5"
+      ]
+    },
+    "custom_urls": []
+  }
+}

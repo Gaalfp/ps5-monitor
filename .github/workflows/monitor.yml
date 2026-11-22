@@ -1,0 +1,65 @@
+name: Monitor de Preço PS5
+
+on:
+  schedule:
+    # Menor intervalo suportado pelo GitHub Actions (a cada 5 minutos).
+    # - Em repositório PÚBLICO: minutos ILIMITADOS e 100% grátis!
+    # - Em repositório PRIVADO (cota grátis de 2.000 min/mês): mude para "*/30 * * * *"
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      test_email:
+        description: "Enviar apenas um e-mail de teste para validar o Gmail?"
+        type: boolean
+        default: false
+      dry_run:
+        description: "Rodar sem enviar e-mail (apenas exibir preços no log)?"
+        type: boolean
+        default: false
+
+# Evita duas execuções simultâneas caso o agendador do GitHub atrase
+concurrency:
+  group: ps5-price-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar código do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Restaurar histórico de alertas (anti-spam)
+        uses: actions/cache/restore@v4
+        with:
+          path: state.json
+          key: ps5-monitor-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ps5-monitor-state-
+
+      - name: Executar monitor de preços
+        env:
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: |
+          if [ "${{ inputs.test_email }}" = "true" ]; then
+            python monitor.py --test-email
+          elif [ "${{ inputs.dry_run }}" = "true" ]; then
+            python monitor.py --dry-run
+          else
+            python monitor.py
+          fi
+
+      - name: Salvar histórico de alertas
+        if: always() && hashFiles('state.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: state.json
+          key: ps5-monitor-state-${{ github.run_id }}-${{ github.run_attempt }}
